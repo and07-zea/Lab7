@@ -2,77 +2,87 @@
  * File:   Lab.c
  * Author: Andrea Rodriguez Zea
  *
- * Created on April 4, 2022, 8:40 PM
+ * Created on April 6, 2022, 5:26 PM
  */
 
 // CONFIG1
-#pragma config FOSC = INTRC_NOCLKOUT    // Oscillator Selection bits (INTOSCIO oscillator: I/O function on RA6/OSC2/CLKOUT pin, I/O function on RA7/OSC1/CLKIN)
-#pragma config WDTE = OFF               // Watchdog Timer Enable bit (WDT disabled and can be enabled by SWDTEN bit of the WDTCON register)
-#pragma config PWRTE = OFF              // Power-up Timer Enable bit (PWRT disabled)
-#pragma config MCLRE = OFF              // RE3/MCLR pin function select bit (RE3/MCLR pin function is digital input, MCLR internally tied to VDD)
-#pragma config CP = OFF                 // Code Protection bit (Program memory code protection is disabled)
-#pragma config CPD = OFF                // Data Code Protection bit (Data memory code protection is disabled)
-#pragma config BOREN = OFF              // Brown Out Reset Selection bits (BOR disabled)
-#pragma config IESO = OFF               // Internal External Switchover bit (Internal/External Switchover mode is disabled)
-#pragma config FCMEN = OFF              // Fail-Safe Clock Monitor Enabled bit (Fail-Safe Clock Monitor is disabled)
-#pragma config LVP = OFF                // Low Voltage Programming Enable bit (RB3 pin has digital I/O, HV on MCLR must be used for programming)
+#pragma config FOSC = INTRC_NOCLKOUT        // Oscillator Selection bits (INTOSCIO oscillator: I/O function on RA6/OSC2/CLKOUT pin, I/O function on RA7/OSC1/CLKIN)
+#pragma config WDTE = OFF                   // Watchdog Timer Enable bit (WDT disabled and can be enabled by SWDTEN bit of the WDTCON register)
+#pragma config PWRTE = OFF                  // Power-up Timer Enable bit (PWRT disabled)
+#pragma config MCLRE = ON                   // RE3/MCLR pin function select bit (RE3/MCLR pin function is digital input, MCLR internally tied to VDD)
+#pragma config CP = OFF                     // Code Protection bit (Program memory code protection is disabled)
+#pragma config CPD = OFF                    // Data Code Protection bit (Data memory code protection is disabled)
+#pragma config BOREN = OFF                  // Brown Out Reset Selection bits (BOR disabled)
+#pragma config IESO = OFF                   // Internal External Switchover bit (Internal/External Switchover mode is disabled)
+#pragma config FCMEN = OFF                  // Fail-Safe Clock Monitor Enabled bit (Fail-Safe Clock Monitor is enabled)
+#pragma config LVP = ON                     // Low Voltage Programming Enable bit (RB3/PGM pin has PGM function, low voltage programming enabled)
 
 // CONFIG2
-#pragma config BOR4V = BOR40V           // Brown-out Reset Selection bit (Brown-out Reset set to 4.0V)
-#pragma config WRT = OFF                // Flash Program Memory Self Write Enable bits (Write protection off)
+#pragma config BOR4V = BOR40V               // Brown-out Reset Selection bit (Brown-out Reset set to 4.0V)
+#pragma config WRT = OFF                    // Flash Program Memory Self Write Enable bits (Write protection off)
 
-#include <xc.h>                         // Compilador usado
-#include <stdint.h>                     // Extensión para INT
-#include <stdio.h>                      
+#include <xc.h>                             // Compilador usado
+#include <stdint.h>
 
-uint8_t IN;
+#define _tmr0 177                           // Cálculo de equivalencia para 5ms
 
 void setup(void);
 
-#define pb_inc  PORTBbits.RB0           // Define el puerto RB0 para PB+
-#define pb_dec  PORTBbits.RB1           // Define el puerto RB0 para PB-
-
-void __interrupt() isr(void)
-
+//INTERRUPCIONES
+void __interrupt() isr (void)
+{
+    if (T0IF)
+    {   PORTD++;                            // Cambiar a timer
+        TMR0 = _tmr0;
+        T0IF = 0;
+     }
+    if (RBIF)
     {
-    if(INTCONbits.RBIF){                // Se localiza interrupción en RB0
-        if(!pb_inc)                     
-        { IN ++ ;                       // Incremento de valores en el puerto C
-            PORTC = IN; 
-            if (IN==20)                 // Se define 0 - 20 como rango
-                IN=0;
-        }         
-        else if(!pb_dec)                // Se localiza interrupción en RB0
-        { IN --;                        // Incremento de valores en el puerto C
-            PORTC = IN;                 
-              if(IN==255)               // Se define 21 - 255 como rango
-                  IN=21;                
-        }            
-        INTCONbits.RBIF = 0;            // Limpia la bandera de interrupción]
-    }
-    return;
+        if (RB0 == 0){                      // Incremento en puerto D
+            PORTC++;
+        }
+        if (RB1 == 0){
+            PORTC--;
+        }  
+        RBIF = 0;   
+    } 
+          
 }
 
 void main(void){
-    setup();
-    while(1){   }
+setup();
+while(1) {}
 }
 
-void setup(void){
-    ANSEL = 0;
-    ANSELH = 0;
+void setup (void)                           //OSC CONFIG
+{   OSCCONbits.SCS = 1;
+    OSCCONbits.IRCF2 = 0;
+    OSCCONbits.IRCF1 = 0;
+    OSCCONbits.IRCF0 = 1;
+  
+    PORTD = 0X00;
+    PORTB = 0X03;
+    PORTC = 0X00;     
+    ANSEL = 0X00;
+    ANSELH = 0X00;
+    TRISC = 0X00;
+    TRISB = 0X03;
+    TRISD = 0X00;
 
-    TRISC = ~0x1F;
-    PORTC = 0; 
+    OPTION_REGbits.nRBPU = 0;               //ENABLE PULLUP PORTB
+    IOCB = 0X03;
     
-    TRISBbits.TRISB0 = 1;               // RB0 es IN
-    TRISBbits.TRISB1 = 1;               // RB1 es IN
-    OPTION_REGbits.nRBPU = 0;           // Pull-Up PORT B
-    WPUBbits.WPUB0 = 1;                 // Pull up-B e RB0
-    WPUBbits.WPUB1 = 1;                 // Pull up-B On RB1
-    INTCONbits.GIE = 1;                 // Interrupciones globales - HABILITADAS
-    INTCONbits.RBIE = 1;                // Interrupciones PORTB
-    IOCBbits.IOCB0 = 1;                 // Interrupciones por cambio de estado para el puerto RB0 
-    IOCBbits.IOCB1 = 1;                 // Interrupciones por cambio de estado para el puerto RB1
-    INTCONbits.RBIF = 0;                // Limpieza de banderas
+    WPUB = 0X03;
+
+    OPTION_REGbits.T0CS = 0;                // CONFIGURAR TMR0
+    OPTION_REGbits.PSA = 0; 
+    OPTION_REGbits.PS2 = 0; 
+    OPTION_REGbits.PS1 = 0;
+    OPTION_REGbits.PS0 = 0;
+    TMR0 = _tmr0;
+    
+    INTCONbits.T0IF = 0;                    //INTCONbits.RBIF = 0;
+
+    INTCONbits.T0IE = 1;                    //INTCONbits.RBIE = 1;
+    INTCONbits.GIE = 1;
 }
